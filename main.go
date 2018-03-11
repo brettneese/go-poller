@@ -27,93 +27,32 @@ func doEvery(d time.Duration, f func(time.Time)) {
 	}
 }
 
-func getData(t time.Time) {
-	var response interface{}
-
-	url := viper.GetString("PROVIDER_API_ROOT")
-	jmespathExpression := viper.GetString("PROVIDER_JMESPATH_EXPRESSION")
-
-	// https://blog.alexellis.io/golang-json-api-client/
-	httpClient := http.Client{
-		Timeout: time.Second * viper.GetDuration("HTTP_TIMEOUT"),
+func createBucketIfNeeded() {
+	svc := s3.New(session.New())
+	input := &s3.CreateBucketInput{
+		Bucket: aws.String(viper.GetString("S3_BUCKET")),
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	res, getErr := httpClient.Do(req)
-	if getErr != nil {
-		log.Fatal(getErr)
-	}
-
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		log.Fatal(readErr)
-	}
-
-	jsonErr := json.Unmarshal(body, &response)
-	if jsonErr != nil {
-		log.Fatal(jsonErr)
-	}
-
-	// filter out just the needed fields by supplying a jmespath expression
-	// https://github.com/jmespath/go-jmespath/issues/22#issuecomment-277719772
-	v, jmesErr := jmespath.Search(jmespathExpression, response)
-
-	if jmesErr != nil {
-		log.Fatal(jmesErr)
-	}
-
-	saveData(v)
-}
-
-func saveData(jsonData interface{}) {
-	//start an s3 session
-	svc := s3.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1"),
-	})))
-
-	var filename string
-
-	fileJSON, _ := json.Marshal(jsonData)
-	fileMd5 := md5.Sum(fileJSON)
-
-	filename = hex.EncodeToString(fileMd5[:])
-
-	if objectExists(svc, filename) == false {
-		writeObject(svc, filename, fileJSON)
-	}
-}
-
-func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
-	input := &s3.PutObjectInput{
-		Body:   bytes.NewReader(fileJSON),
-		Bucket: aws.String("com.brettneese.opentransit-pollerv2.production.cta-train"),
-		Key:    aws.String(filename),
-	}
-
-	result, err := svc.PutObject(input)
+	result, err := svc.CreateBucket(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeBucketAlreadyExists:
+				log.Info(s3.ErrCodeBucketAlreadyExists, aerr.Error())
+			case s3.ErrCodeBucketAlreadyOwnedByYou:
+				log.Error(s3.ErrCodeBucketAlreadyOwnedByYou, aerr.Error())
 			default:
-				fmt.Println(aerr.Error())
+				log.Error(aerr.Error())
 			}
 		} else {
 			// Print the error, cast err to awserr.Error to get the Code and
 			// Message from an error.
-			fmt.Println(err.Error())
+			log.Error(err.Error())
 		}
 		return
 	}
 
-	if result != nil {
-		log.Info("Writing object: ", filename)
-	}
-
-	//fmt.Println(result)
+	log.Info(result)
 }
 
 func objectExists(svc *s3.S3, filename string) bool {
@@ -153,14 +92,114 @@ func objectExists(svc *s3.S3, filename string) bool {
 	return false
 }
 
+func getData(t time.Time) {
+	var response interface{}
+
+	url := viper.GetString("PROVIDER_API_ROOT")
+	jmespathExpression := viper.GetString("PROVIDER_JMESPATH_EXPRESSION")
+
+	// https://blog.alexellis.io/golang-json-api-client/
+	httpClient := http.Client{
+		Timeout: time.Second * viper.GetDuration("HTTP_TIMEOUT"),
+	}
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res, getErr := httpClient.Do(req)
+	if getErr != nil {
+		log.Fatal(getErr)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+
+	jsonErr := json.Unmarshal(body, &response)
+	if jsonErr != nil {
+		log.Fatal(jsonErr)
+	}
+
+	// filter out just the needed fields by supplying a jmespath expression
+	// https://github.com/jmespath/go-jmespath/issues/22#issuecomment-277719772
+	filteredData, jmesErr := jmespath.Search(jmespathExpression, response)
+
+	if jmesErr != nil {
+		log.Fatal(jmesErr)
+	}
+
+	saveData(filteredData)
+}
+
+func saveData(jsonData interface{}) {
+	//start an s3 session
+	svc := s3.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String("us-east-1"),
+	})))
+
+	var filename string
+
+	fileJSON, _ := json.Marshal(jsonData)
+	fileMd5 := md5.Sum(fileJSON)
+
+	filename = hex.EncodeToString(fileMd5[:])
+
+	if objectExists(svc, filename) == false {
+		writeObject(svc, filename, fileJSON)
+	}
+}
+
+func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
+	input := &s3.PutObjectInput{
+		Body:   bytes.NewReader(fileJSON),
+		Bucket: aws.String(viper.GetString("S3_BUCKET")),
+		Key:    aws.String(filename),
+	}
+
+	result, err := svc.PutObject(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+		return
+	}
+
+	if result != nil {
+		log.Info("Writing object: ", filename)
+	}
+
+	log.Debug(result)
+}
+
 func main() {
+
 	viper.AutomaticEnv()
 
 	viper.SetDefault("HTTP_TIMEOUT", 5000)
 	viper.SetDefault("PROVIDER_REFRESH_INTERVAL", 5000)
 	viper.SetDefault("PROVIDER_JMESPATH_EXPRESSION", "*")
+	viper.SetDefault("STAGE", "staging")
+	viper.SetDefault("PROJECT_ID", "com.opentransit-pollerv2")
 
-	// check if the bucket exists and if it doesn't create it on init
+	// if the env var S3_BUCKET is set, use that value, otherwise computer a bucket name from the STAGE
+	if viper.GetString("S3_BUCKET") == "" && viper.GetString("STAGE") != "" && viper.GetString("PROVIDER_ID") != "" {
+		bucketName := viper.GetString("PROJECT_ID") + "." + viper.GetString("STAGE") + "." + viper.GetString("PROVIDER_ID")
+		viper.Set("S3_BUCKET", bucketName)
+	} else {
+		log.Error("Please supply either an S3_BUCKET env var; or a STAGE and PROVIDER_NAME env var")
+	}
+
+	createBucketIfNeeded()
 
 	doEvery(viper.GetDuration("PROVIDER_REFRESH_INTERVAL")*time.Millisecond, getData)
 }
