@@ -28,7 +28,7 @@ func getData(t time.Time) {
 
 	// https://blog.alexellis.io/golang-json-api-client/
 	httpClient := http.Client{
-		Timeout: time.Second * 5, // Maximum of 5 secs
+		Timeout: time.Second * viper.GetDuration("HTTP_TIMEOUT"),
 	}
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -82,6 +82,7 @@ func saveData(jsonData interface{}) {
 func main() {
 	viper.AutomaticEnv()
 
+	viper.SetDefault("HTTP_TIMEOUT", 5000)
 	viper.SetDefault("REFRESH_INTERVAL", 5000)
 	viper.SetDefault("JMESPATH_EXPRESSION", "*")
 
