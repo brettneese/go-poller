@@ -4,11 +4,16 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	jmespath "github.com/jmespath/go-jmespath"
 	viper "github.com/spf13/viper"
 )
@@ -63,6 +68,10 @@ func getData(t time.Time) {
 }
 
 func saveData(jsonData interface{}) {
+	//start an s3 session
+	svc := s3.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String("us-east-1"),
+	})))
 
 	var filename string
 
@@ -77,6 +86,40 @@ func saveData(jsonData interface{}) {
 		log.Fatal(err)
 	}
 
+	if objectExists(svc, filename) == false {
+		writeObject(svc, filename, jsonData)
+	}
+}
+
+func objectExists(svc *s3.S3, filename string) bool {
+	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_GetObject_shared00
+	input := &s3.GetObjectInput{
+		Bucket: aws.String("com.brettneese.opentransit-pollerv2.production.cta-train"),
+		Key:    aws.String(filename),
+	}
+
+	result, err := svc.GetObject(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket:
+				// makeBucket()
+			case s3.ErrCodeNoSuchKey:
+				fmt.Println(s3.ErrCodeNoSuchKey, aerr.Error())
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+		return false
+	}
+
+	fmt.Println(result)
+
+	return true
 }
 
 func main() {
