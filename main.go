@@ -110,7 +110,7 @@ func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
 	}
 
 	if result != nil {
-		fmt.Println("INFO: Writing object")
+		log.Info("Writing object: ", filename)
 	}
 
 	//fmt.Println(result)
@@ -130,9 +130,9 @@ func objectExists(svc *s3.S3, filename string) bool {
 			case s3.ErrCodeNoSuchBucket:
 				// makeBucket()
 			case s3.ErrCodeNoSuchKey:
-				fmt.Println(s3.ErrCodeNoSuchKey, aerr.Error())
+				log.Debug(s3.ErrCodeNoSuchKey, aerr.Error())
 			default:
-				fmt.Println(aerr.Error())
+				log.Error(aerr.Error())
 			}
 		} else {
 			// Print the error, cast err to awserr.Error to get the Code and
@@ -145,7 +145,7 @@ func objectExists(svc *s3.S3, filename string) bool {
 	}
 
 	if result != nil {
-		fmt.Println("INFO: Object already exists")
+		log.Debug("Object already exists: ", filename)
 
 		return true
 	}
