@@ -1,14 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -80,15 +82,38 @@ func saveData(jsonData interface{}) {
 
 	filename = hex.EncodeToString(fileMd5[:])
 
-	err := ioutil.WriteFile(filename, fileJSON, 0644)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if objectExists(svc, filename) == false {
-		writeObject(svc, filename, jsonData)
+		writeObject(svc, filename, fileJSON)
 	}
+}
+
+func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
+	input := &s3.PutObjectInput{
+		Body:   bytes.NewReader(fileJSON),
+		Bucket: aws.String("com.brettneese.opentransit-pollerv2.production.cta-train"),
+		Key:    aws.String(filename),
+	}
+
+	result, err := svc.PutObject(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+		return
+	}
+
+	if result != nil {
+		fmt.Println("INFO: Writing object")
+	}
+
+	//fmt.Println(result)
 }
 
 func objectExists(svc *s3.S3, filename string) bool {
@@ -114,12 +139,18 @@ func objectExists(svc *s3.S3, filename string) bool {
 			// Message from an error.
 			fmt.Println(err.Error())
 		}
+
 		return false
+
 	}
 
-	fmt.Println(result)
+	if result != nil {
+		fmt.Println("INFO: Object already exists")
 
-	return true
+		return true
+	}
+
+	return false
 }
 
 func main() {
