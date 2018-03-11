@@ -30,8 +30,8 @@ func doEvery(d time.Duration, f func(time.Time)) {
 func getData(t time.Time) {
 	var response interface{}
 
-	url := viper.GetString("PROVIDER_URL")
-	jmespathExpression := viper.GetString("JMESPATH_EXPRESSION")
+	url := viper.GetString("PROVIDER_API_ROOT")
+	jmespathExpression := viper.GetString("PROVIDER_JMESPATH_EXPRESSION")
 
 	// https://blog.alexellis.io/golang-json-api-client/
 	httpClient := http.Client{
@@ -119,7 +119,7 @@ func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
 func objectExists(svc *s3.S3, filename string) bool {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_GetObject_shared00
 	input := &s3.GetObjectInput{
-		Bucket: aws.String("com.brettneese.opentransit-pollerv2.production.cta-train"),
+		Bucket: aws.String(viper.GetString("S3_BUCKET")),
 		Key:    aws.String(filename),
 	}
 
@@ -128,7 +128,7 @@ func objectExists(svc *s3.S3, filename string) bool {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case s3.ErrCodeNoSuchBucket:
-				// makeBucket()
+				log.Error(s3.ErrCodeNoSuchBucket, aerr.Error())
 			case s3.ErrCodeNoSuchKey:
 				log.Debug(s3.ErrCodeNoSuchKey, aerr.Error())
 			default:
@@ -157,8 +157,10 @@ func main() {
 	viper.AutomaticEnv()
 
 	viper.SetDefault("HTTP_TIMEOUT", 5000)
-	viper.SetDefault("REFRESH_INTERVAL", 5000)
-	viper.SetDefault("JMESPATH_EXPRESSION", "*")
+	viper.SetDefault("PROVIDER_REFRESH_INTERVAL", 5000)
+	viper.SetDefault("PROVIDER_JMESPATH_EXPRESSION", "*")
 
-	doEvery(viper.GetDuration("REFRESH_INTERVAL")*time.Millisecond, getData)
+	// check if the bucket exists and if it doesn't create it on init
+
+	doEvery(viper.GetDuration("PROVIDER_REFRESH_INTERVAL")*time.Millisecond, getData)
 }
