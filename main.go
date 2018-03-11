@@ -2,14 +2,16 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
-	v "github.com/spf13/viper"
+	jmespath "github.com/jmespath/go-jmespath"
+	viper "github.com/spf13/viper"
 )
 
-type JSONResponse map[string]interface{}
+type JSONBlob []byte
 
 // https://groups.google.com/forum/#!topic/golang-nuts/W1KJQr35NE0
 func doEvery(d time.Duration, f func(time.Time)) {
@@ -18,29 +20,49 @@ func doEvery(d time.Duration, f func(time.Time)) {
 	}
 }
 
-func getJson(url string, target interface{}) error {
-	var httpClient = &http.Client{Timeout: 10 * time.Second}
+func getData(t time.Time) {
+	var response interface{}
 
-	r, err := httpClient.Get(url)
-	if err != nil {
-		return err
+	url := viper.GetString("PROVIDER_URL")
+
+	httpClient := http.Client{
+		Timeout: time.Second * 10, // Maximum of 2 secs
 	}
-	defer r.Body.Close()
 
-	return json.NewDecoder(r.Body).Decode(target)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res, getErr := httpClient.Do(req)
+	if getErr != nil {
+		log.Fatal(getErr)
+	}
+
+	body, readErr := ioutil.ReadAll(res.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+
+	jsonErr := json.Unmarshal(body, &response)
+	if jsonErr != nil {
+		log.Fatal(jsonErr)
+	}
+
+	processData(response)
 }
 
-func helloworld(t time.Time) {
+func processData(jsonBlob interface{}) {
 
-	resp := new(JSONResponse) // or &Foo{}
+	v, err := jmespath.Search("ctatt.[route]", jsonBlob)
 
-	getJson(v.GetString("PROVIDER_URL"), resp)
-
-	fmt.Printf("%v", resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(v)
 }
-
 func main() {
-	v.AutomaticEnv()
+	viper.AutomaticEnv()
 
-	doEvery(v.GetDuration("REFRESH_INTERVAL")*time.Millisecond, helloworld)
+	doEvery(viper.GetDuration("REFRESH_INTERVAL")*time.Millisecond, getData)
 }
