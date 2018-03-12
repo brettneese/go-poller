@@ -189,7 +189,7 @@ func main() {
 	viper.SetDefault("PROVIDER_REFRESH_INTERVAL", 5000)
 	viper.SetDefault("PROVIDER_JMESPATH_EXPRESSION", "*")
 	viper.SetDefault("STAGE", "staging")
-	viper.SetDefault("PROJECT_ID", "com.opentransit-pollerv2")
+	viper.SetDefault("PROJECT_ID", "org.opentransit.pollerv2")
 
 	// if the env var S3_BUCKET is set, use that value, otherwise compute a bucket name from the STAGE
 	if viper.GetString("S3_BUCKET") == "" && viper.GetString("STAGE") != "" && viper.GetString("PROVIDER_ID") != "" {
