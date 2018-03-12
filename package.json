@@ -1,0 +1,5 @@
+{
+    "scripts": {
+        "build:docker": "docker run --rm -v \"$(pwd):/src\" -e LDFLAGS='-s -w' -e COMPRESS_BINARY=true  -v /var/run/docker.sock:/var/run/docker.sock centurylink/golang-builder"
+    }
+}

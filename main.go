@@ -1,4 +1,4 @@
-package main
+package main // import "github.com/brettneese/go-poller"
 
 import (
 	"bytes"
@@ -28,6 +28,8 @@ func doEvery(d time.Duration, f func(time.Time)) {
 }
 
 func createBucketIfNeeded() {
+	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#S3.CreateBucket
+
 	svc := s3.New(session.New())
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(viper.GetString("S3_BUCKET")),
@@ -45,8 +47,6 @@ func createBucketIfNeeded() {
 				log.Error(aerr.Error())
 			}
 		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
 			log.Error(err.Error())
 		}
 		return
@@ -57,6 +57,7 @@ func createBucketIfNeeded() {
 
 func objectExists(svc *s3.S3, filename string) bool {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_GetObject_shared00
+
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(viper.GetString("S3_BUCKET")),
 		Key:    aws.String(filename),
@@ -140,12 +141,10 @@ func saveData(jsonData interface{}) {
 		Region: aws.String("us-east-1"),
 	})))
 
-	var filename string
-
 	fileJSON, _ := json.Marshal(jsonData)
 	fileMd5 := md5.Sum(fileJSON)
 
-	filename = hex.EncodeToString(fileMd5[:])
+	filename := hex.EncodeToString(fileMd5[:])
 
 	if objectExists(svc, filename) == false {
 		writeObject(svc, filename, fileJSON)
@@ -153,6 +152,8 @@ func saveData(jsonData interface{}) {
 }
 
 func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
+	// https: //docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_PutObject_shared00
+
 	input := &s3.PutObjectInput{
 		Body:   bytes.NewReader(fileJSON),
 		Bucket: aws.String(viper.GetString("S3_BUCKET")),
@@ -167,8 +168,6 @@ func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
 				fmt.Println(aerr.Error())
 			}
 		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
 			fmt.Println(err.Error())
 		}
 		return
@@ -185,18 +184,19 @@ func main() {
 
 	viper.AutomaticEnv()
 
+	// set some default variables
 	viper.SetDefault("HTTP_TIMEOUT", 5000)
 	viper.SetDefault("PROVIDER_REFRESH_INTERVAL", 5000)
 	viper.SetDefault("PROVIDER_JMESPATH_EXPRESSION", "*")
 	viper.SetDefault("STAGE", "staging")
 	viper.SetDefault("PROJECT_ID", "com.opentransit-pollerv2")
 
-	// if the env var S3_BUCKET is set, use that value, otherwise computer a bucket name from the STAGE
+	// if the env var S3_BUCKET is set, use that value, otherwise compute a bucket name from the STAGE
 	if viper.GetString("S3_BUCKET") == "" && viper.GetString("STAGE") != "" && viper.GetString("PROVIDER_ID") != "" {
 		bucketName := viper.GetString("PROJECT_ID") + "." + viper.GetString("STAGE") + "." + viper.GetString("PROVIDER_ID")
 		viper.Set("S3_BUCKET", bucketName)
 	} else {
-		log.Error("Please supply either an S3_BUCKET env var; or a STAGE and PROVIDER_NAME env var")
+		log.Error("Please supply either an S3_BUCKET environment variable; or a STAGE and PROVIDER_ID environment variable.")
 	}
 
 	createBucketIfNeeded()
