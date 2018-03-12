@@ -1,5 +1,8 @@
 {
+    "version": "1.0.0",
     "scripts": {
-        "build:docker": "docker run --rm -v \"$(pwd):/src\" -e LDFLAGS='-s -w' -e COMPRESS_BINARY=true  -v /var/run/docker.sock:/var/run/docker.sock centurylink/golang-builder"
+        "docker:tag": "docker tag go-poller:latest brettneese/go-poller:$npm_package_version",
+        "docker:push": "npm run docker:tag; docker push brettneese/go-poller:$npm_package_version",
+        "docker:build": "docker run --rm -v \"$(pwd):/src\" -e LDFLAGS='-s -w' -e COMPRESS_BINARY=true  -v /var/run/docker.sock:/var/run/docker.sock centurylink/golang-builder"
     }
 }
