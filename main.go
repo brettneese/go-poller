@@ -20,6 +20,9 @@ import (
 	viper "github.com/spf13/viper"
 )
 
+var svc *s3.S3
+var httpClient http.Client
+
 // https://groups.google.com/forum/#!topic/golang-nuts/W1KJQr35NE0
 func doEvery(d time.Duration, f func(time.Time)) {
 	for x := range time.Tick(d) {
@@ -30,7 +33,6 @@ func doEvery(d time.Duration, f func(time.Time)) {
 func createBucketIfNeeded() {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#S3.CreateBucket
 
-	svc := s3.New(session.New())
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(viper.GetString("S3_BUCKET")),
 	}
@@ -55,7 +57,7 @@ func createBucketIfNeeded() {
 	log.Info(result)
 }
 
-func objectExists(svc *s3.S3, filename string) bool {
+func objectExists(filename string) bool {
 	// https://docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_GetObject_shared00
 
 	input := &s3.GetObjectInput{
@@ -99,17 +101,19 @@ func getData(t time.Time) {
 	url := viper.GetString("PROVIDER_API_ROOT")
 	jmespathExpression := viper.GetString("PROVIDER_JMESPATH_EXPRESSION")
 
-	// https://blog.alexellis.io/golang-json-api-client/
-	httpClient := http.Client{
-		Timeout: time.Second * viper.GetDuration("HTTP_TIMEOUT"),
-	}
-
 	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Add("Connection", "close")
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	res, getErr := httpClient.Do(req)
+
+	if res != nil {
+		defer res.Body.Close()
+	}
+
 	if getErr != nil {
 		log.Fatal(getErr)
 	}
@@ -136,22 +140,18 @@ func getData(t time.Time) {
 }
 
 func saveData(jsonData interface{}) {
-	//start an s3 session
-	svc := s3.New(session.Must(session.NewSession(&aws.Config{
-		Region: aws.String("us-east-1"),
-	})))
 
 	fileJSON, _ := json.Marshal(jsonData)
 	fileMd5 := md5.Sum(fileJSON)
 
 	filename := hex.EncodeToString(fileMd5[:])
 
-	if objectExists(svc, filename) == false {
-		writeObject(svc, filename, fileJSON)
+	if objectExists(filename) == false {
+		writeObject(filename, fileJSON)
 	}
 }
 
-func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
+func writeObject(filename string, fileJSON []byte) {
 	// https: //docs.aws.amazon.com/sdk-for-go/api/service/s3/#example_S3_PutObject_shared00
 
 	input := &s3.PutObjectInput{
@@ -180,7 +180,21 @@ func writeObject(svc *s3.S3, filename string, fileJSON []byte) {
 	log.Debug(result)
 }
 
+func init() {
+
+	svc = s3.New(session.Must(session.NewSession(&aws.Config{
+		Region: aws.String("us-east-1"),
+	})))
+
+	// https://blog.alexellis.io/golang-json-api-client/
+	httpClient = http.Client{
+		Timeout: time.Second * viper.GetDuration("HTTP_TIMEOUT"),
+	}
+
+}
+
 func main() {
+	log.SetLevel(log.DebugLevel)
 
 	viper.AutomaticEnv()
 
